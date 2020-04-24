@@ -1,0 +1,66 @@
+运行代码参考：https://blog.csdn.net/weixin_41697507/article/details/89436973
+
+请注意，所有这些代码都是用Python 2编写的。如果您正在使用任何其他Python版本，请进行以下更改：
+
+1. 在make_dataset.ipynb中将其中相应部分替换为以下内容（luckyluckydadada/CSRnet中的代码）：
+
+def gaussian_filter_density(gt):
+    #Generates a density map using Gaussian filter transformation
+    density = np.zeros(gt.shape, dtype=np.float32)
+    gt_count = np.count_nonzero(gt)   
+    if gt_count == 0:
+        return density
+    # FInd out the K nearest neighbours using a KDTree
+    pts = np.array(list(zip(np.nonzero(gt)[1].ravel(), np.nonzero(gt)[0].ravel())))
+    leafsize = 2048  
+    # build kdtree
+    tree = scipy.spatial.KDTree(pts.copy(), leafsize=leafsize)  
+    # query kdtree
+    distances, locations = tree.query(pts, k=4)
+        
+    for i, pt in enumerate(pts):
+        pt2d = np.zeros(gt.shape, dtype=np.float32)
+        pt2d[pt[1],pt[0]] = 1.
+        if gt_count > 1:
+            sigma = (distances[i][1]+distances[i][2]+distances[i][3])*0.1
+        else:
+            sigma = np.average(np.array(gt.shape))/2./2. #case: 1 point     
+        #Convolve with the gaussian filter      
+        density += scipy.ndimage.filters.gaussian_filter(pt2d, sigma, mode='constant')  
+    return density
+
+img_paths = []
+for path in path_sets:
+    for img_path in glob.glob(os.path.join(path, '*.jpg')):
+        img_paths.append(img_path)
+print(len(img_paths))
+print(img_paths[0:5])
+
+
+for img_path in img_paths:
+    print(img_path)
+    mat = io.loadmat(img_path.replace('.jpg','.mat').replace('images','ground_truth').replace('IMG_','GT_IMG_'))
+    gt = mat["image_info"][0,0][0,0][0]
+
+    print(mat["image_info"][0,0][0,0][0])
+    print(gt.shape)  #27张人脸的坐标
+
+    img= plt.imread(img_path)
+    k = np.zeros((img.shape[0],img.shape[1]))
+    for i in range(0,len(gt)):
+        if int(gt[i][1])<img.shape[0] and int(gt[i][0])<img.shape[1]:
+            k[int(gt[i][1]),int(gt[i][0])]=1
+
+        # generate density map
+    k = gaussian_filter_density(k)
+    with h5py.File(img_path.replace('.jpg','.h5').replace('images','ground_truth'), 'w') as hf:
+            hf['density'] = k
+
+2. 在model.py中，将第18行中的xrange更改为range
+
+3. 更改model.py中的第19行：list(self.frontend.state_dict().items())[i][1].data[:] = list(mod.state_dict().items())[i][1].data[:]
+
+4. 在image.py中，将ground_truth替换为ground-true
+
+
+我们将使用克隆目录中提供的.json文件。 我们只需要更改json文件中图像的位置。 为此，请打开.json文件，并将当前位置替换为图像所在的位置。
